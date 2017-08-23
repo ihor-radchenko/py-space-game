@@ -27,6 +27,8 @@ power_ups = pygame.sprite.Group()
 cursors = pygame.sprite.Group()
 ufos = pygame.sprite.Group()
 
+icon = pygame.image.load('img/icon.png').convert_alpha()
+pygame.display.set_icon(icon)
 background = pygame.image.load('img/bg.jpg').convert()
 background = pygame.transform.scale(background, (520, 650))
 background_rect = background.get_rect()
@@ -78,8 +80,7 @@ ui_img = {'red': pygame.image.load('img/UI/buttonRed.png').convert_alpha(),
 ui_act_img = {'red': pygame.image.load('img/UI/buttonRed_active.png').convert_alpha(),
               'blue': pygame.image.load('img/UI/buttonBlue_active.png').convert_alpha(),
               'green': pygame.image.load('img/UI/buttonGreen_active.png').convert_alpha(),
-              'yellow': pygame.image.load('img/UI/buttonYellow_active.png').convert_alpha(),
-              'cursor': pygame.image.load('img/UI/cursor.png').convert_alpha()}
+              'yellow': pygame.image.load('img/UI/buttonYellow_active.png').convert_alpha()}
 
 bg1_sound = 'sound/background.mp3'
 pygame.mixer.music.load(bg1_sound)
