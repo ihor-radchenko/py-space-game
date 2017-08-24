@@ -20,6 +20,7 @@ screen = pygame.display.set_mode((MAX_X, MAX_Y))
 pygame.display.set_caption('SpaceGame')
 pygame.mouse.set_visible(0)
 
+#Группы спрайтов
 all_sprites = pygame.sprite.Group()
 meteors = pygame.sprite.Group()
 bullets = pygame.sprite.Group()
@@ -27,6 +28,7 @@ power_ups = pygame.sprite.Group()
 cursors = pygame.sprite.Group()
 ufos = pygame.sprite.Group()
 
+#Загрузка графики
 icon = pygame.image.load('img/icon.png').convert_alpha()
 pygame.display.set_icon(icon)
 background = pygame.image.load('img/bg.jpg').convert()
@@ -82,10 +84,12 @@ ui_act_img = {'red': pygame.image.load('img/UI/buttonRed_active.png').convert_al
               'green': pygame.image.load('img/UI/buttonGreen_active.png').convert_alpha(),
               'yellow': pygame.image.load('img/UI/buttonYellow_active.png').convert_alpha()}
 
+# Загрузка звука
 bg1_sound = 'sound/background.mp3'
 pygame.mixer.music.load(bg1_sound)
 pygame.mixer.music.play(-1, 0.0)
 laser_shot = pygame.mixer.Sound('sound/fire_laser1.wav')
+power_up_sound = pygame.mixer.Sound('sound/powerUp.ogg')
 explosion_sound = []
 for i in range(0, 3):
     s = 'sound/explosion/Explosion{}.wav'.format(i)
@@ -561,6 +565,7 @@ def run_game():
             random.choice(explosion_sound).play()
             all_sprites.add(explosion)
             spawn_meteor()
+            # Вероятность появления усилителя
             if random.randint(1, 100) >= 90:
                 power_up = PowerUps(hit.rect.center)
                 all_sprites.add(power_up)
@@ -568,6 +573,7 @@ def run_game():
         # Подбор усилителя игроком
         hits = pygame.sprite.spritecollide(ship, power_ups, True)
         for hit in hits:
+            power_up_sound.play()
             if hit.type == 'shield':
                 ship.shield_power()
             if hit.type == 'bolt':
