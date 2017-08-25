@@ -1,10 +1,16 @@
+# Space shooter
+#Ihor Radchenko
+#art: https://opengameart.org by Kenney.nl
+#sound: https://opengameart.org; http://www.bfxr.net; Freelancer
+
 import pygame, sys, random, math
 
 MAX_X = 400
 MAX_Y = 650
 FPS = 60
-POWER_UP_TIME = 5000
+POWER_UP_TIME = 5000  # Время действия усилителя в мс. (5сек)
 
+# Цвета ( R  , G ,  B )
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 RED = (255, 0, 0)
@@ -22,8 +28,10 @@ pygame.mouse.set_visible(0)
 
 #Группы спрайтов
 all_sprites = pygame.sprite.Group()
+enemies = pygame.sprite.Group()
 meteors = pygame.sprite.Group()
 bullets = pygame.sprite.Group()
+enemy_bullets = pygame.sprite.Group()
 power_ups = pygame.sprite.Group()
 cursors = pygame.sprite.Group()
 ufos = pygame.sprite.Group()
@@ -39,7 +47,9 @@ ship_img = pygame.image.load('img/player/playerShip.png').convert_alpha()
 player_life_img = pygame.image.load('img/player/playerLife1_red.png').convert_alpha()
 shield_img = pygame.image.load('img/player/shield1.png').convert_alpha()
 bullet_img = [pygame.image.load('img/bullets/laserRed01.png').convert_alpha(),
-              pygame.image.load('img/bullets/laserRed16.png').convert_alpha()]
+              pygame.image.load('img/bullets/laserRed16.png').convert_alpha(),
+              pygame.image.load('img/bullets/laserBlue01.png').convert_alpha(),
+              pygame.image.load('img/bullets/laserBlue16.png').convert_alpha()]
 meteor_img = [pygame.image.load('img/meteor/meteorBrown_big1.png').convert_alpha(),
               pygame.image.load('img/meteor/meteorBrown_big2.png').convert_alpha(),
               pygame.image.load('img/meteor/meteorBrown_big3.png').convert_alpha(),
@@ -50,6 +60,7 @@ meteor_img = [pygame.image.load('img/meteor/meteorBrown_big1.png').convert_alpha
               pygame.image.load('img/meteor/meteorBrown_small2.png').convert_alpha(),
               pygame.image.load('img/meteor/meteorBrown_tiny1.png').convert_alpha(),
               pygame.image.load('img/meteor/meteorBrown_tiny2.png').convert_alpha()]
+enemies_img = pygame.image.load('img/Enemies/ufoBlue.png').convert_alpha()
 numbers = []
 for i in range(10):
     f = 'img/number/numeral{}.png'.format(i)
@@ -59,6 +70,7 @@ explosion_anim = {}
 explosion_anim['large'] = []
 explosion_anim['small'] = []
 explosion_anim['player_death'] = []
+explosion_anim['boss_death'] = []
 for i in range(9):
     f = 'img/explosion/regularExplosion0{}.png'.format(i)
     img = pygame.image.load(f).convert_alpha()
@@ -69,6 +81,8 @@ for i in range(9):
     f = 'img/explosion_player/sonicExplosion0{}.png'.format(i)
     img_player_death = pygame.image.load(f).convert_alpha()
     explosion_anim['player_death'].append(img_player_death)
+    img_boss_death = pygame.transform.scale(img_player_death, (250, 250))
+    explosion_anim['boss_death'].append(img_boss_death)
 power_up_images = {'bolt': pygame.image.load('img/power_ups/bolt_gold.png').convert_alpha(),
                    'pill': pygame.image.load('img/power_ups/pill_red.png').convert_alpha(),
                    'shield': pygame.image.load('img/power_ups/shield_gold.png').convert_alpha(),
@@ -106,38 +120,48 @@ class Ship(pygame.sprite.Sprite):
         self.mask = pygame.mask.from_surface(self.image)
         self.fire_rate = 200  #---milisecond
         self.fire_tick = pygame.time.get_ticks()
-        self.hp = 100
+        self.max_hp = 100
+        self.hp = self.max_hp
         self.life = 3
         self.turret = 1
         self.gun = 1
         self.shield = 1
+        self.damage = 25
 
     def update(self):
+        # Когда подобран "щит"
         if self.shield >= 2 and pygame.time.get_ticks() - self.shield_tick >= POWER_UP_TIME:
             self.shield = 1
             self.image = pygame.transform.scale(ship_img, (50, 37))
             self.rect = self.image.get_rect()
             self.rect.bottom = MAX_Y
             self.shield_tick = pygame.time.get_ticks()
+        # Когда подобраны патроны
         if self.turret >= 2 and pygame.time.get_ticks() - self.turret_tick >= POWER_UP_TIME:
             self.turret = 1
             self.turret_tick = pygame.time.get_ticks()
+        # Когда подобрана "молния"
         if self.gun >= 2 and pygame.time.get_ticks() - self.gun_tick >= POWER_UP_TIME:
             self.gun = 1
             self.fire_rate = 200
+            self.damage = 25
             self.gun_tick = pygame.time.get_ticks()
         self.new_fire_tick = pygame.time.get_ticks()
+        # Управление мышкой
         self.rect.centerx = pygame.mouse.get_pos()[0]
+        # Нормальное перемещение
         if self.shield == 1:
             if self.rect.left <= 0:
                 self.rect.left = 0
             if self.rect.right >= MAX_X:
                 self.rect.right = MAX_X
+        # Перемещение когда подобран щит
         if self.shield >= 2:
             if self.rect.left - 8 <= 0:
                 self.rect.left = -8
             if self.rect.right + 8 >= MAX_X:
                 self.rect.right = MAX_X + 8
+        # Стрельба мышкой
         if pygame.mouse.get_pressed()[0]:
             if self.new_fire_tick - self.fire_tick >= self.fire_rate:
                 self.fire_tick = self.new_fire_tick
@@ -171,6 +195,7 @@ class Ship(pygame.sprite.Sprite):
 
     def gun_power(self):
         self.gun += 1
+        self.damage = 40
         self.fire_rate = 150
         self.gun_tick = pygame.time.get_ticks()
 
@@ -181,6 +206,80 @@ class Ship(pygame.sprite.Sprite):
         self.rect.bottom = MAX_Y + 8.5
         self.shield_tick = pygame.time.get_ticks()
 
+class Enemies(pygame.sprite.Sprite):
+    def __init__(self):
+        super().__init__()
+        self.image = enemies_img
+        self.rect = self.image.get_rect()
+        self.rect.center = (MAX_X / 2, 0 - 110)
+        self.mask = pygame.mask.from_surface(self.image)
+        self.dx = 0
+        self.dy = 0
+        self.shoot_tick = pygame.time.get_ticks()
+        self.fire_rate = 300
+        self.max_hp = 1000
+        self.hp = self.max_hp
+        self.damage = 45
+        self.berz = 0
+        self.position = 'hide'
+
+    def update(self):
+        if self.position == 'hide':
+            self.rect.center = (MAX_X / 2, 0 - 110)
+            self.dx = 0
+            self.dy = 0
+            self.hp = self.max_hp
+        # Если начинается бой с боссом начинаем движение
+        if level == 'boss' and self.position == 'hide':
+            self.position = 'move'
+        if self.position == 'move':
+            self.dy = 4
+        if self.position != 'hide':
+            # Перемещение
+            self.rect.centerx += self.dx
+            self.rect.centery += self.dy
+        if self.rect.top >= MAX_Y * .25 and self.position == 'move':
+            self.position = 'start_position'
+        if self.position == 'start_position':
+            self.position = 'start_fight'
+            self.dx = random.choice([-4, 4])
+            self.dy = random.choice([-4, 4])
+        if self.position == 'start_position' or self.position == 'start_fight':
+            # Границы движения
+            if self.rect.top <= MAX_Y * .11 or self.rect.bottom >= MAX_Y * .65 or random.randrange(150) == 1:
+                self.dy = -self.dy
+            if self.rect.left <= 0 or self.rect.right >= MAX_X or random.randrange(150) == 1:
+                self.dx = -self.dx
+        if self.position == 'start_fight':
+            # Стрельба
+            if pygame.time.get_ticks() - self.shoot_tick >= self.fire_rate:
+                self.shoot()
+                self.shoot_tick = pygame.time.get_ticks()
+
+        # Переход в раш
+        self.berzerc()
+
+    def shoot(self):
+        enemy_bullet = Bullet(self.rect.centerx, self.rect.bottom + 110)
+        if self.berz >= 1:
+            enemy_bullet.image = pygame.transform.rotate(bullet_img[3], 180)
+        else:
+            enemy_bullet.image = pygame.transform.rotate(bullet_img[2], 180)
+        if self.berz == 2:
+            enemy_bullet.dy = 12
+        else:
+            enemy_bullet.dy = 10
+        all_sprites.add(enemy_bullet)
+        enemy_bullets.add(enemy_bullet)
+
+    def berzerc(self):
+        if self.hp <= self.max_hp * .66:
+            self.berz = 1
+            self.damage = 70
+        if self.hp <= self.max_hp * .33:
+            self.berz = 2
+            self.fire_rate = 225
+
 class Bullet(pygame.sprite.Sprite):
     def __init__(self, x_pos, y_pos):
         super().__init__()
@@ -189,11 +288,11 @@ class Bullet(pygame.sprite.Sprite):
         self.rect.bottom = y_pos
         self.rect.centerx = x_pos
         self.mask = pygame.mask.from_surface(self.image)
-        self.dy = 15
+        self.dy = -15
 
     def update(self):
-        self.rect.centery -= self.dy
-        if self.rect.bottom <= 0:
+        self.rect.centery += self.dy
+        if self.rect.bottom <= 0 or self.rect.top >= MAX_Y:
             self.kill()
 
 class Meteor(pygame.sprite.Sprite):
@@ -356,23 +455,33 @@ def msg_to_screen(surf, message, x_pos, y_pos, size = 50, color = BLACK):
     surf.blit(text, text_rect)
 
 def spawn_meteor():
-    while len(meteors) < 8:
-        m = Meteor()
-        all_sprites.add(m)
-        meteors.add(m)
+    if level == 'meteor':
+        while len(meteors) < 8:
+            m = Meteor()
+            all_sprites.add(m)
+            meteors.add(m)
 
-def draw_hp_bar(x_pos, y_pos, scale):
+def draw_boss_hp_bar(x_pos, y_pos, scale, max_quantity):
+    rect_width = 300
     if scale <= 0:
         scale = 0
-    percent = scale / 100
+    percent = scale / max_quantity
+    pygame.draw.rect(screen, RED, (x_pos, y_pos, rect_width * percent, 20))
+    pygame.draw.rect(screen, WHITE, (x_pos, y_pos, rect_width, 20), 2)
+
+def draw_hp_bar(x_pos, y_pos, scale, max_quantity):
+    rect_width = 100
+    if scale <= 0:
+        scale = 0
+    percent = scale / max_quantity
     if percent >= .75:
         color_hp = GREEN
     elif .25 <= percent < .75:
         color_hp = YELLOW
     else:
         color_hp = RED
-    pygame.draw.rect(screen, color_hp, (x_pos, y_pos, 100 * percent, 15))
-    pygame.draw.rect(screen, WHITE, (x_pos, y_pos, 100, 15), 2)
+    pygame.draw.rect(screen, color_hp, (x_pos, y_pos, rect_width * percent, 15))
+    pygame.draw.rect(screen, WHITE, (x_pos, y_pos, rect_width, 15), 2)
 
 def draw_player_life(x_pos, y_pos, lifes):
     life_rect = player_life_img.get_rect()
@@ -418,16 +527,17 @@ def draw_score(x_pos, y_pos, score):
 
 def game_over():
 
+    all_sprites.empty()
+    enemies.empty()
+
     while True:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
 
-        all_sprites.update()
         cursors.update()
         screen.blit(background, background_rect)
-        all_sprites.draw(screen)
         draw_button('Еще раз', MAX_X / 2, MAX_Y * .6, 'green', 'start_game')
         draw_button('Выйти', MAX_X / 2, MAX_Y * .7, 'red', 'quit')
         msg_to_screen(screen, 'Вы проиграли', MAX_X / 2, MAX_Y * .15, 60, WHITE)
@@ -513,20 +623,24 @@ def main_menu():
         draw_button('Выход', MAX_X / 3, MAX_Y * .9, 'red', 'quit')
         msg_to_screen(screen, 'SPACE', MAX_X / 2, MAX_Y * .15, 90, WHITE)
         msg_to_screen(screen, 'SCHOOTER', MAX_X / 2, MAX_Y * .25, 90, WHITE)
-        msg_to_screen(screen, 'ver. 1.0', MAX_X - 25, MAX_Y - 5, 15, WHITE)
+        msg_to_screen(screen, 'ver. 1.1', MAX_X - 25, MAX_Y - 5, 15, WHITE)
         cursors.draw(screen)
         pygame.display.update()
         clock.tick(FPS)
 
 def run_game():
 
+    global score
+    global level
+    score = 1
+    level = 'meteor'
     ship = Ship()
+    enemy = Enemies()
     all_sprites.add(ship)
     spawn_meteor()
-    global score
-    score = 0
 
     while True:
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
@@ -535,6 +649,53 @@ def run_game():
                 if event.key == pygame.K_ESCAPE:
                     pause()
 
+        # Начало битвы с боссом
+        if 14000 <= score % 15000:
+            # Битва с боссом
+            level = 'boss'
+            enemies.add(enemy)
+            all_sprites.add(enemy)
+
+        # Попадание игрока по врагу
+        hits = pygame.sprite.spritecollide(enemy, bullets, True, pygame.sprite.collide_mask)
+        for hit in hits:
+            explosion = Explosion(hit.rect.center, 'small')
+            random.choice(explosion_sound).play()
+            all_sprites.add(explosion)
+            if enemy.position == 'start_fight':
+                enemy.hp -= ship.damage
+                score += 1
+                if enemy.hp <= 0:
+                    score += 3000
+                    enemy.position = 'hide'
+                    random.choice(explosion_sound).play()
+                    explosion_enemy = Explosion(enemy.rect.center, 'boss_death')
+                    all_sprites.add(explosion_enemy)
+                    enemy.rect.center = (MAX_X / 2, 0 - 110)
+                    level = 'meteor'
+                    spawn_meteor()
+                # Вероятность появления усилителя
+                if random.randint(1, 100) >= 75:
+                    power_up = PowerUps(hit.rect.center)
+                    all_sprites.add(power_up)
+                    power_ups.add(power_up)
+        # Попадание врага по игроку
+        hits = pygame.sprite.spritecollide(ship, enemy_bullets, True, pygame.sprite.collide_mask)
+        for hit in hits:
+            explosion = Explosion(hit.rect.center, 'small')
+            random.choice(explosion_sound).play()
+            all_sprites.add(explosion)
+            if ship.shield == 1:
+                ship.hp -= enemy.damage
+                score -= 1
+                if ship.hp <= 0:
+                    ship.life -= 1
+                    ship.hp = ship.max_hp
+                    if ship.life == 0:
+                        random.choice(explosion_sound).play()
+                        explosion_player = Explosion(ship.rect.center, 'player_death')
+                        all_sprites.add(explosion_player)
+                        ship.kill()
         # Столкновение игрока с метеоритом
         hits = pygame.sprite.spritecollide(ship, meteors, True, pygame.sprite.collide_mask)
         for hit in hits:
@@ -545,9 +706,10 @@ def run_game():
                 ship.hp -= hit.damage
                 if ship.hp <= 0:
                     ship.life -= 1
-                    ship.hp = 100
+                    ship.hp = ship.max_hp
                     ship.hide = True
                 if ship.life == 0:
+                    random.choice(explosion_sound).play()
                     explosion_player = Explosion(ship.rect.center, 'player_death')
                     all_sprites.add(explosion_player)
                     ship.kill()
@@ -584,8 +746,8 @@ def run_game():
                 score += 500
             if hit.type == 'pill':
                 ship.hp += random.randint(10, 25)
-                if ship.hp >= 100:
-                    ship.hp = 100
+                if ship.hp >= ship.max_hp:
+                    ship.hp = ship.max_hp
 
         # Если игрок погиб и анимация смерти завершилась:
         if not ship.alive() and not explosion_player.alive():
@@ -594,10 +756,14 @@ def run_game():
         all_sprites.update()
         screen.blit(background, background_rect)
         all_sprites.draw(screen)
-        draw_hp_bar(MAX_X * .7, MAX_Y * .03, ship.hp)
+        draw_hp_bar(MAX_X * .7, MAX_Y * .03, ship.hp, ship.max_hp)
         draw_player_life(MAX_X * .05, MAX_Y * .02, ship.life)
+        if level == 'boss' and enemy.position != 'hide':
+            draw_boss_hp_bar(MAX_X * .15, MAX_Y * .08, enemy.hp, enemy.max_hp)
         draw_score(MAX_X / 2, MAX_Y * .035, score)
         pygame.display.update()
         clock.tick(FPS)
 
+score = 0
+level = 'meteor'
 main_menu()
